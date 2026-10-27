@@ -17,6 +17,16 @@ For DOCX-to-PDF conversion, install Microsoft Word (macOS/Windows; used through 
 
 ## Run
 
+### Easiest: one command
+
+```bash
+./start.command
+```
+
+On macOS you can also double-click `start.command` in Finder. It creates the local virtual environment if needed, installs dependencies, downloads the dedicated Playwright browser on the first run, starts the backend, and then opens the Streamlit app. Keep its Terminal window open while using the app; press Control-C there to stop it.
+
+### Run the services separately
+
 In one terminal:
 
 ```bash
