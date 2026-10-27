@@ -11,3 +11,5 @@ wheels/
 
 # Runtime data (SQLite DB + stored resumes)
 data/
+
+.DS_*

@@ -2,11 +2,11 @@
 
 Run the FastAPI backend:
 
-    uv run python main.py
+    .venv/bin/python main.py
 
 Then open the Streamlit UI separately:
 
-    uv run streamlit run streamlit_app.py
+    .venv/bin/streamlit run streamlit_app.py
 """
 
 from __future__ import annotations

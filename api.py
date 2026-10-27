@@ -154,7 +154,9 @@ def sync_resume(req: SyncRequest):
                     message=f"Unknown platform: {platform}",
                 )
             else:
-                result = adapter.upload(resume["stored_path"], {})
+                # Keep the original user-facing name even when local storage had
+                # to add a collision-avoidance suffix to the on-disk filename.
+                result = adapter.upload(resume["stored_path"], {"filename": resume["filename"]})
             record_id = add_sync_record(
                 conn,
                 resume_id=req.resume_id,
@@ -175,6 +177,21 @@ def sync_resume(req: SyncRequest):
     finally:
         conn.close()
     return results
+
+
+@router.post("/wellfound/login")
+def setup_wellfound_login():
+    """Open the dedicated browser profile for a one-time Wellfound login."""
+    adapter = get_adapter("wellfound")
+    if adapter is None:
+        raise HTTPException(status_code=500, detail="Wellfound adapter is unavailable")
+    result = adapter.login()
+    return {
+        "platform": result.platform,
+        "status": result.status,
+        "message": result.message,
+        "manual_url": result.manual_url,
+    }
 
 
 @router.get("/sync/history")
@@ -211,7 +228,7 @@ def complete_manual_sync(record_id: int):
 
 @router.post("/sync/{record_id}/open")
 def open_upload_page(record_id: int):
-    """Open the platform's upload page in the user's default browser."""
+    """Open the platform's upload page."""
     conn = connect()
     try:
         row = conn.execute(
@@ -224,5 +241,13 @@ def open_upload_page(record_id: int):
         conn.close()
     if row is None or not row["manual_url"]:
         raise HTTPException(status_code=404, detail="no upload page for this record")
+    adapter = get_adapter(row["platform"])
+    if row["platform"] == "wellfound" and adapter is not None:
+        result = adapter.open_upload_page()
+        return {
+            "ok": not result.message.startswith("Could not open"),
+            "url": result.manual_url,
+            "message": result.message,
+        }
     webbrowser.open(row["manual_url"])
     return {"ok": True, "url": row["manual_url"]}

@@ -83,6 +83,21 @@ def status_badge(status: str):
 
 def page_upload():
     st.header("Upload a resume")
+    with st.expander("Set up Wellfound browser login", expanded=False):
+        st.write(
+            "The first Wellfound sync needs a sign-in in a dedicated Chromium profile. "
+            "A browser window will open; complete login, CAPTCHA, or verification yourself."
+        )
+        if st.button("Open Wellfound login", key="wellfound_login"):
+            try:
+                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
+                    result = _post("/wellfound/login")
+                if result["status"] == "completed":
+                    st.success(result["message"])
+                else:
+                    st.warning(result["message"])
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Could not start Wellfound login: {exc}")
     uploaded = st.file_uploader("Resume (PDF/DOCX)", type=["pdf", "docx", "txt"])
     platforms = _get("/platforms")
     options = [p["name"] for p in platforms]
@@ -101,7 +116,8 @@ def page_upload():
         resume_id = resume["id"]
         st.subheader("Sync results")
         try:
-            results = _post("/sync", {"resume_id": resume_id, "platforms": selected})
+            with st.spinner("Syncing selected platforms… Wellfound may open its dedicated browser."):
+                results = _post("/sync", {"resume_id": resume_id, "platforms": selected})
         except Exception as exc:  # noqa: BLE001
             st.error(f"Sync failed: {exc}")
             return
@@ -119,8 +135,11 @@ def page_upload():
                         key=f"open_{r['record_id']}",
                     ):
                         try:
-                            _post(f"/sync/{r['record_id']}/open")
-                            st.info("Opened upload page in your browser.")
+                            opened = _post(f"/sync/{r['record_id']}/open")
+                            if opened["ok"]:
+                                st.info(opened["message"])
+                            else:
+                                st.error(opened["message"])
                         except Exception as exc:  # noqa: BLE001
                             st.error(f"Could not open browser: {exc}")
                     if r["status"] == "manual_required":
@@ -156,8 +175,11 @@ def page_history():
             if r["manual_url"]:
                 if st.button("Open upload page", key=f"hist_open_{r['id']}"):
                     try:
-                        _post(f"/sync/{r['id']}/open")
-                        st.info("Opened upload page in your browser.")
+                        opened = _post(f"/sync/{r['id']}/open")
+                        if opened["ok"]:
+                            st.info(opened["message"])
+                        else:
+                            st.error(opened["message"])
                     except Exception as exc:  # noqa: BLE001
                         st.error(f"Could not open browser: {exc}")
                 if r["status"] == "manual_required":

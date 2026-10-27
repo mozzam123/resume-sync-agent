@@ -42,3 +42,21 @@ class PlatformAdapter:
             status="failed",
             message="No upload path configured for this platform.",
         )
+
+    def login(self) -> SyncResult:
+        """Open a platform-specific login flow when one is available."""
+        return SyncResult(
+            platform=self.name,
+            status="manual_required",
+            message="This platform does not have a browser login setup flow.",
+            manual_url=self.upload_page_url,
+        )
+
+    def open_upload_page(self) -> SyncResult:
+        """Open the manual upload page, if the adapter supports it."""
+        return SyncResult(
+            platform=self.name,
+            status="manual_required",
+            message="Open the upload page in your browser and complete the upload manually.",
+            manual_url=self.upload_page_url,
+        )
