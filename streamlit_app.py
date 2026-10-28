@@ -25,7 +25,7 @@ def _get(path: str):
         return json.loads(r.read())
 
 
-def _post(path: str, payload: dict | None = None, files=None):
+def _post(path: str, payload: dict | None = None, files=None, timeout: int = 30):
     import json
     import urllib.request
 
@@ -41,7 +41,7 @@ def _post(path: str, payload: dict | None = None, files=None):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 
@@ -91,13 +91,28 @@ def page_upload():
         if st.button("Open Wellfound login", key="wellfound_login"):
             try:
                 with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
-                    result = _post("/wellfound/login")
+                    result = _post("/wellfound/login", timeout=330)
                 if result["status"] == "completed":
                     st.success(result["message"])
                 else:
                     st.warning(result["message"])
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Could not start Wellfound login: {exc}")
+    with st.expander("Set up Naukri browser login", expanded=False):
+        st.write(
+            "The first Naukri sync needs a sign-in in its own dedicated Chromium profile. "
+            "Complete any CAPTCHA or verification yourself."
+        )
+        if st.button("Open Naukri login", key="naukri_login"):
+            try:
+                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
+                    result = _post("/naukri/login", timeout=330)
+                if result["status"] == "completed":
+                    st.success(result["message"])
+                else:
+                    st.warning(result["message"])
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Could not start Naukri login: {exc}")
     uploaded = st.file_uploader("Resume (PDF/DOCX)", type=["pdf", "docx", "txt"])
     platforms = _get("/platforms")
     options = [p["name"] for p in platforms]
@@ -117,7 +132,11 @@ def page_upload():
         st.subheader("Sync results")
         try:
             with st.spinner("Syncing selected platforms… Wellfound may open its dedicated browser."):
-                results = _post("/sync", {"resume_id": resume_id, "platforms": selected})
+                results = _post(
+                    "/sync",
+                    {"resume_id": resume_id, "platforms": selected},
+                    timeout=180,
+                )
         except Exception as exc:  # noqa: BLE001
             st.error(f"Sync failed: {exc}")
             return

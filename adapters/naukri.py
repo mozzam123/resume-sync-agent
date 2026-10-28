@@ -1,13 +1,13 @@
-"""Naukri adapter (browser-assisted, compliant)."""
+"""Naukri resume upload using a dedicated persistent Playwright profile."""
 
 from __future__ import annotations
 
-from .base import PlatformAdapter, SyncResult
+from .wellfound import DATA_DIR, WellfoundAdapter
 
 
-class NaukriAdapter(PlatformAdapter):
+class NaukriAdapter(WellfoundAdapter):
     name = "naukri"
+    platform_label = "Naukri"
     upload_page_url = "https://www.naukri.com/mnjuser/profile"
-
-    def upload(self, resume_path: str, profile: dict) -> SyncResult:
-        return super().upload(resume_path, profile)
+    profile_dir = DATA_DIR / "naukri-playwright-profile"
+    converted_dir = DATA_DIR / "naukri-converted"

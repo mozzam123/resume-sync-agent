@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -25,6 +26,14 @@ from db import (
 )
 
 router = APIRouter()
+
+# Playwright's synchronous API must run outside FastAPI's asyncio loop. A single
+# worker also serializes browser actions when the user selects several platforms.
+_browser_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="resume-browser")
+
+
+def _run_browser_action(action):
+    return _browser_executor.submit(action).result()
 
 
 class SyncRequest(BaseModel):
@@ -156,7 +165,10 @@ def sync_resume(req: SyncRequest):
             else:
                 # Keep the original user-facing name even when local storage had
                 # to add a collision-avoidance suffix to the on-disk filename.
-                result = adapter.upload(resume["stored_path"], {"filename": resume["filename"]})
+                upload = lambda: adapter.upload(
+                    resume["stored_path"], {"filename": resume["filename"]}
+                )
+                result = _run_browser_action(upload) if adapter.uses_playwright else upload()
             record_id = add_sync_record(
                 conn,
                 resume_id=req.resume_id,
@@ -185,7 +197,22 @@ def setup_wellfound_login():
     adapter = get_adapter("wellfound")
     if adapter is None:
         raise HTTPException(status_code=500, detail="Wellfound adapter is unavailable")
-    result = adapter.login()
+    result = _run_browser_action(adapter.login)
+    return {
+        "platform": result.platform,
+        "status": result.status,
+        "message": result.message,
+        "manual_url": result.manual_url,
+    }
+
+
+@router.post("/naukri/login")
+def setup_naukri_login():
+    """Open the dedicated browser profile for a one-time Naukri login."""
+    adapter = get_adapter("naukri")
+    if adapter is None:
+        raise HTTPException(status_code=500, detail="Naukri adapter is unavailable")
+    result = _run_browser_action(adapter.login)
     return {
         "platform": result.platform,
         "status": result.status,
@@ -242,8 +269,8 @@ def open_upload_page(record_id: int):
     if row is None or not row["manual_url"]:
         raise HTTPException(status_code=404, detail="no upload page for this record")
     adapter = get_adapter(row["platform"])
-    if row["platform"] == "wellfound" and adapter is not None:
-        result = adapter.open_upload_page()
+    if row["platform"] in {"wellfound", "naukri"} and adapter is not None:
+        result = _run_browser_action(adapter.open_upload_page)
         return {
             "ok": not result.message.startswith("Could not open"),
             "url": result.manual_url,

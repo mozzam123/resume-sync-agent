@@ -23,6 +23,7 @@ class PlatformAdapter:
 
     name = "base"
     upload_page_url: str | None = None
+    uses_playwright = False
 
     def upload(self, resume_path: str, profile: dict) -> SyncResult:
         if self.upload_page_url:

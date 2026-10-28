@@ -39,7 +39,7 @@ In another terminal:
 .venv/bin/streamlit run streamlit_app.py
 ```
 
-Open the local Streamlit URL shown in the second terminal. Before the first Wellfound sync, select **Open Wellfound login**, sign in in the Chromium window that opens, and complete any CAPTCHA or verification yourself. The profile is saved only at `data/wellfound-playwright-profile/` and is not your default browser profile. The Playwright Chromium download is kept at `data/playwright-browsers/`.
+Open the local Streamlit URL shown in the second terminal. Before the first Wellfound or Naukri sync, select that platform's **Open … login** option, sign in in the Chromium window that opens, and complete any CAPTCHA or verification yourself. Each profile is saved only under `data/` and is not your default browser profile. The Playwright Chromium download is kept at `data/playwright-browsers/`.
 
 ## Wellfound behaviour
 

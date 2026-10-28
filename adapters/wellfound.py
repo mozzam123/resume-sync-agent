@@ -34,19 +34,19 @@ class ResumeConversionError(RuntimeError):
     """Raised when a Wellfound-compatible PDF cannot be prepared."""
 
 
-def prepare_wellfound_resume(resume_path: str) -> Path:
-    """Return a PDF for Wellfound, converting DOCX files when necessary."""
+def prepare_resume_pdf(resume_path: str, converted_dir: Path = CONVERTED_DIR) -> Path:
+    """Return a PDF for a browser-assisted platform, converting DOCX if needed."""
     source = Path(resume_path).expanduser().resolve()
     if not source.is_file():
         raise ResumeConversionError("The stored resume file is missing.")
     if source.suffix.lower() == ".pdf":
         return source
     if source.suffix.lower() != ".docx":
-        raise ResumeConversionError("Wellfound automation supports PDF or DOCX resumes only.")
+        raise ResumeConversionError("Browser-assisted upload supports PDF or DOCX resumes only.")
 
-    CONVERTED_DIR.mkdir(parents=True, exist_ok=True)
+    converted_dir.mkdir(parents=True, exist_ok=True)
     fingerprint = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
-    destination = CONVERTED_DIR / f"{source.stem}-{fingerprint}.pdf"
+    destination = converted_dir / f"{source.stem}-{fingerprint}.pdf"
     if destination.exists():
         return destination
 
@@ -54,8 +54,8 @@ def prepare_wellfound_resume(resume_path: str) -> Path:
     try:
         from docx2pdf import convert
 
-        convert(str(source), str(CONVERTED_DIR))
-        generated = CONVERTED_DIR / f"{source.stem}.pdf"
+        convert(str(source), str(converted_dir))
+        generated = converted_dir / f"{source.stem}.pdf"
         if generated.exists():
             generated.replace(destination)
             return destination
@@ -66,13 +66,13 @@ def prepare_wellfound_resume(resume_path: str) -> Path:
     if soffice:
         try:
             subprocess.run(
-                [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(CONVERTED_DIR), str(source)],
+                [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(converted_dir), str(source)],
                 check=True,
                 capture_output=True,
                 text=True,
                 timeout=120,
             )
-            generated = CONVERTED_DIR / f"{source.stem}.pdf"
+            generated = converted_dir / f"{source.stem}.pdf"
             if generated.exists():
                 generated.replace(destination)
                 return destination
@@ -87,8 +87,12 @@ def prepare_wellfound_resume(resume_path: str) -> Path:
 
 class WellfoundAdapter(PlatformAdapter):
     name = "wellfound"
+    platform_label = "Wellfound"
+    uses_playwright = True
     # Wellfound's dedicated resume editor exposes the actual file upload form.
     upload_page_url = "https://wellfound.com/profile/edit/resume"
+    profile_dir = PROFILE_DIR
+    converted_dir = CONVERTED_DIR
 
     def login(self) -> SyncResult:
         """Let the user complete the one-time interactive login in Chromium."""
@@ -103,7 +107,7 @@ class WellfoundAdapter(PlatformAdapter):
                             return SyncResult(
                                 platform=self.name,
                                 status="completed",
-                                message="Wellfound login saved in this app's dedicated browser profile.",
+                                message=f"{self.platform_label} login saved in this app's dedicated browser profile.",
                             )
                         time.sleep(1)
                     return self._manual_result(
@@ -120,7 +124,7 @@ class WellfoundAdapter(PlatformAdapter):
 
     def upload(self, resume_path: str, profile: dict) -> SyncResult:
         try:
-            pdf_path = prepare_wellfound_resume(resume_path)
+            pdf_path = prepare_resume_pdf(resume_path, self.converted_dir)
         except ResumeConversionError as exc:
             return self._manual_result(str(exc))
 
@@ -134,8 +138,8 @@ class WellfoundAdapter(PlatformAdapter):
                         keep_open = True
                         self._retain_open_browser(context, playwright)
                         return self._manual_result(
-                            "Wellfound is not ready for an automated upload. Sign in or complete any verification in "
-                            "the dedicated Wellfound browser window, then upload manually."
+                            f"{self.platform_label} is not ready for an automated upload. Sign in or complete any verification in "
+                            f"the dedicated {self.platform_label} browser window, then upload manually."
                         )
 
                     file_input = page.locator("input[type='file']").first
@@ -148,8 +152,8 @@ class WellfoundAdapter(PlatformAdapter):
                             platform=self.name,
                             status="success",
                             message=(
-                                f"Wellfound confirmed that {pdf_path.name} was saved. "
-                                "Please review your Wellfound profile when convenient."
+                                f"{self.platform_label} confirmed that {pdf_path.name} was saved. "
+                                f"Please review your {self.platform_label} profile when convenient."
                             ),
                             manual_url=self.upload_page_url,
                         )
@@ -160,8 +164,8 @@ class WellfoundAdapter(PlatformAdapter):
                         platform=self.name,
                         status="manual_required",
                         message=(
-                            f"{pdf_path.name} was selected, but Wellfound did not show a saved confirmation. "
-                            "The dedicated Wellfound browser window is still open—review it and click its save "
+                            f"{pdf_path.name} was selected, but {self.platform_label} did not show a saved confirmation. "
+                            f"The dedicated {self.platform_label} browser window is still open—review it and click its save "
                             "control yourself, then mark this sync complete."
                         ),
                         manual_url=self.upload_page_url,
@@ -174,7 +178,7 @@ class WellfoundAdapter(PlatformAdapter):
                             playwright.stop()
         except Exception as exc:  # Never claim success when the page changes or auth fails.
             return self._manual_result(
-                "Automatic upload could not be verified; no access control was bypassed. "
+                f"Automatic {self.platform_label} upload could not be verified; no access control was bypassed. "
                 f"Use the manual upload page instead. Details: {self._safe_error(exc)}"
             )
 
@@ -185,11 +189,11 @@ class WellfoundAdapter(PlatformAdapter):
         os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_BROWSERS_DIR))
         from playwright.sync_api import sync_playwright
 
-        PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+        self.profile_dir.mkdir(parents=True, exist_ok=True)
         playwright = sync_playwright().start()
         try:
             context = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(PROFILE_DIR),
+                user_data_dir=str(self.profile_dir),
                 headless=False,
                 accept_downloads=False,
             )
@@ -223,7 +227,7 @@ class WellfoundAdapter(PlatformAdapter):
                 page.goto(self.upload_page_url, wait_until="domcontentloaded", timeout=PAGE_WAIT_SECONDS * 1000)
                 self._retain_open_browser(context, playwright)
             return self._manual_result(
-                "Opened Wellfound in the dedicated browser profile. Complete the upload there; "
+            f"Opened {self.platform_label} in the dedicated browser profile. Complete the upload there; "
                 "the window stays open until you close it."
             )
         except Exception as exc:
@@ -285,7 +289,7 @@ class WellfoundAdapter(PlatformAdapter):
 
     @staticmethod
     def _retain_open_browser(context, playwright) -> None:
-        """Keep a manual Wellfound window alive after this API request returns."""
+        """Keep a manual platform window alive after this API request returns."""
         item = (context, playwright)
         _open_contexts.append(item)
 
