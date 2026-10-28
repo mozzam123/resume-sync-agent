@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 import storage
 from adapters import ADAPTERS, get_adapter
+from adapters.multi_platform import MultiPlatformBrowser
 from db import (
     add_resume,
     add_sync_record,
@@ -26,10 +27,12 @@ from db import (
 )
 
 router = APIRouter()
+BACKEND_BUILD = "browser-worker-2026-10-28"
 
 # Playwright's synchronous API must run outside FastAPI's asyncio loop. A single
 # worker also serializes browser actions when the user selects several platforms.
 _browser_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="resume-browser")
+_multi_platform_browser = MultiPlatformBrowser()
 
 
 def _run_browser_action(action):
@@ -62,6 +65,12 @@ def list_platforms():
         {"name": name, "upload_page_url": adapter.upload_page_url}
         for name, adapter in sorted(ADAPTERS.items())
     ]
+
+
+@router.get("/health")
+def health_check():
+    """Lets the UI detect a stale backend after code changes."""
+    return {"ok": True, "build": BACKEND_BUILD}
 
 
 def _save_upload(file: UploadFile) -> tuple[str, int, str]:
@@ -150,6 +159,15 @@ def sync_resume(req: SyncRequest):
         raise HTTPException(status_code=404, detail="resume not found")
 
     results = []
+    selected_adapters = [get_adapter(platform) for platform in req.platforms]
+    browser_adapters = [adapter for adapter in selected_adapters if adapter and adapter.uses_playwright]
+    shared_results = {}
+    if len(browser_adapters) > 1:
+        shared_results = _run_browser_action(
+            lambda: _multi_platform_browser.upload(
+                browser_adapters, resume["stored_path"], resume["filename"]
+            )
+        )
     conn = connect()
     try:
         for platform in req.platforms:
@@ -162,6 +180,8 @@ def sync_resume(req: SyncRequest):
                     status="failed",
                     message=f"Unknown platform: {platform}",
                 )
+            elif platform in shared_results:
+                result = shared_results[platform]
             else:
                 # Keep the original user-facing name even when local storage had
                 # to add a collision-avoidance suffix to the on-disk filename.
@@ -189,6 +209,22 @@ def sync_resume(req: SyncRequest):
     finally:
         conn.close()
     return results
+
+
+@router.post("/multi-platform/login")
+def setup_multi_platform_login():
+    """Open Naukri and Wellfound together in tabs of the shared browser profile."""
+    adapters = [get_adapter("naukri"), get_adapter("wellfound")]
+    adapters = [adapter for adapter in adapters if adapter is not None]
+    ready = _run_browser_action(lambda: _multi_platform_browser.login(adapters))
+    return {
+        "status": "completed" if ready else "manual_required",
+        "message": (
+            "Naukri and Wellfound login are saved in the shared browser profile."
+            if ready
+            else "Complete login or verification in both open tabs, then try again."
+        ),
+    }
 
 
 @router.post("/wellfound/login")

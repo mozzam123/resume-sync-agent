@@ -23,7 +23,7 @@ For DOCX-to-PDF conversion, install Microsoft Word (macOS/Windows; used through 
 ./start.command
 ```
 
-On macOS you can also double-click `start.command` in Finder. It creates the local virtual environment if needed, installs dependencies, downloads the dedicated Playwright browser on the first run, starts the backend, and then opens the Streamlit app. Keep its Terminal window open while using the app; press Control-C there to stop it.
+On macOS you can also double-click `start.command` in Finder. It creates the local virtual environment if needed, installs dependencies, downloads the dedicated Playwright browser on the first run, starts the backend, and then opens the Streamlit app. Keep its Terminal window open while using the app; press Control-C there to stop it. When code changes, stop the existing process first; the launcher intentionally refuses to reuse an already-running backend.
 
 ### Run the services separately
 
@@ -40,6 +40,8 @@ In another terminal:
 ```
 
 Open the local Streamlit URL shown in the second terminal. Before the first Wellfound or Naukri sync, select that platform's **Open … login** option, sign in in the Chromium window that opens, and complete any CAPTCHA or verification yourself. Each profile is saved only under `data/` and is not your default browser profile. The Playwright Chromium download is kept at `data/playwright-browsers/`.
+
+When selecting both Naukri and Wellfound, use **Open both login tabs** once first. Combined syncing uses one shared profile at `data/job-platform-playwright-profile/`, so both platforms can open in separate tabs of the same browser window.
 
 ## Wellfound behaviour
 

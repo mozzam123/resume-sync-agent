@@ -14,6 +14,7 @@ from __future__ import annotations
 import streamlit as st
 
 API_BASE = "http://127.0.0.1:8000/api"
+REQUIRED_BACKEND_BUILD = "browser-worker-2026-10-28"
 
 
 def _get(path: str):
@@ -83,6 +84,21 @@ def status_badge(status: str):
 
 def page_upload():
     st.header("Upload a resume")
+    with st.expander("Set up shared Naukri + Wellfound login", expanded=False):
+        st.write(
+            "For syncing both together, this opens Naukri and Wellfound in two tabs of one shared browser. "
+            "Sign in to both once; this is separate from the individual platform profiles."
+        )
+        if st.button("Open both login tabs", key="multi_platform_login"):
+            try:
+                with st.spinner("Waiting for you to finish signing in to both tabs (up to five minutes)…"):
+                    result = _post("/multi-platform/login", timeout=330)
+                if result["status"] == "completed":
+                    st.success(result["message"])
+                else:
+                    st.warning(result["message"])
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Could not start shared platform login: {exc}")
     with st.expander("Set up Wellfound browser login", expanded=False):
         st.write(
             "The first Wellfound sync needs a sign-in in a dedicated Chromium profile. "
@@ -214,6 +230,17 @@ def page_history():
 def main():
     st.set_page_config(page_title="Resume Sync Agent", page_icon="📄")
     st.title("Resume Sync Agent")
+    try:
+        health = _get("/health")
+    except Exception:
+        st.error(
+            "The backend is unavailable or is an older version. Stop the existing app process, "
+            "then run ./start.command again."
+        )
+        st.stop()
+    if health.get("build") != REQUIRED_BACKEND_BUILD:
+        st.error("An older backend is still running. Stop it, then run ./start.command again.")
+        st.stop()
     st.caption("Upload a resume once, sync it across your selected platforms.")
     page = st.sidebar.radio("Go to", ["Upload", "History"], index=0)
     if page == "Upload":

@@ -6,6 +6,6 @@ from fastapi import FastAPI
 
 from api import router
 
-app = FastAPI(title="Resume Sync Agent", version="0.1.0")
+app = FastAPI(title="Resume Sync Agent", version="0.2.0")
 
 app.include_router(router, prefix="/api")
