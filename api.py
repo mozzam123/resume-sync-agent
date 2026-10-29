@@ -213,14 +213,14 @@ def sync_resume(req: SyncRequest):
 
 @router.post("/multi-platform/login")
 def setup_multi_platform_login():
-    """Open Naukri and Wellfound together in tabs of the shared browser profile."""
-    adapters = [get_adapter("naukri"), get_adapter("wellfound")]
+    """Open LinkedIn, Naukri, and Wellfound in tabs of the shared browser profile."""
+    adapters = [get_adapter("linkedin"), get_adapter("naukri"), get_adapter("wellfound")]
     adapters = [adapter for adapter in adapters if adapter is not None]
     ready = _run_browser_action(lambda: _multi_platform_browser.login(adapters))
     return {
         "status": "completed" if ready else "manual_required",
         "message": (
-            "Naukri and Wellfound login are saved in the shared browser profile."
+            "LinkedIn, Naukri, and Wellfound login are saved in the shared browser profile."
             if ready
             else "Complete login or verification in both open tabs, then try again."
         ),
@@ -248,6 +248,21 @@ def setup_naukri_login():
     adapter = get_adapter("naukri")
     if adapter is None:
         raise HTTPException(status_code=500, detail="Naukri adapter is unavailable")
+    result = _run_browser_action(adapter.login)
+    return {
+        "platform": result.platform,
+        "status": result.status,
+        "message": result.message,
+        "manual_url": result.manual_url,
+    }
+
+
+@router.post("/linkedin/login")
+def setup_linkedin_login():
+    """Open the dedicated browser profile for a one-time LinkedIn login."""
+    adapter = get_adapter("linkedin")
+    if adapter is None:
+        raise HTTPException(status_code=500, detail="LinkedIn adapter is unavailable")
     result = _run_browser_action(adapter.login)
     return {
         "platform": result.platform,
@@ -305,7 +320,7 @@ def open_upload_page(record_id: int):
     if row is None or not row["manual_url"]:
         raise HTTPException(status_code=404, detail="no upload page for this record")
     adapter = get_adapter(row["platform"])
-    if row["platform"] in {"wellfound", "naukri"} and adapter is not None:
+    if row["platform"] in {"linkedin", "wellfound", "naukri"} and adapter is not None:
         result = _run_browser_action(adapter.open_upload_page)
         return {
             "ok": not result.message.startswith("Could not open"),

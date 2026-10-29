@@ -41,7 +41,7 @@ In another terminal:
 
 Open the local Streamlit URL shown in the second terminal. Before the first Wellfound or Naukri sync, select that platform's **Open … login** option, sign in in the Chromium window that opens, and complete any CAPTCHA or verification yourself. Each profile is saved only under `data/` and is not your default browser profile. The Playwright Chromium download is kept at `data/playwright-browsers/`.
 
-When selecting both Naukri and Wellfound, use **Open both login tabs** once first. Combined syncing uses one shared profile at `data/job-platform-playwright-profile/`, so both platforms can open in separate tabs of the same browser window.
+When selecting multiple platforms, use **Open shared login tabs** once first. Combined syncing uses one shared profile at `data/job-platform-playwright-profile/`, so LinkedIn, Naukri, and Wellfound can open in separate tabs of the same browser window.
 
 ## Wellfound behaviour
 

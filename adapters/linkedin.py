@@ -1,15 +1,31 @@
-"""LinkedIn adapter (browser-assisted, compliant)."""
+"""LinkedIn resume upload using a dedicated persistent Playwright profile."""
 
 from __future__ import annotations
 
-from .base import PlatformAdapter, SyncResult
+from .wellfound import DATA_DIR, WellfoundAdapter
 
 
-class LinkedInAdapter(PlatformAdapter):
+class LinkedInAdapter(WellfoundAdapter):
     name = "linkedin"
-    upload_page_url = "https://www.linkedin.com/in/me/edit/contact-info/"
+    platform_label = "LinkedIn"
+    upload_page_url = "https://www.linkedin.com/jobs/application-settings/"
+    profile_dir = DATA_DIR / "linkedin-playwright-profile"
+    converted_dir = DATA_DIR / "linkedin-converted"
 
-    def upload(self, resume_path: str, profile: dict) -> SyncResult:
-        # LinkedIn does not offer a free public resume-upload API for individuals.
-        # Reuse the user's authenticated browser session for a manual upload.
-        return super().upload(resume_path, profile)
+    def prepare_upload_form(self, page) -> None:
+        """LinkedIn shows its file input after the Resume upload action."""
+        if page.locator("input[type='file']").count() > 0:
+            return
+        for selector in (
+            "button:has-text('Upload resume')",
+            "button:has-text('Upload Resume')",
+            "button:has-text('Upload')",
+        ):
+            button = page.locator(selector).first
+            try:
+                if button.is_visible():
+                    button.click(timeout=5_000)
+                    page.wait_for_timeout(500)
+                    return
+            except Exception:
+                continue

@@ -84,14 +84,14 @@ def status_badge(status: str):
 
 def page_upload():
     st.header("Upload a resume")
-    with st.expander("Set up shared Naukri + Wellfound login", expanded=False):
+    with st.expander("Set up shared LinkedIn + Naukri + Wellfound login", expanded=False):
         st.write(
-            "For syncing both together, this opens Naukri and Wellfound in two tabs of one shared browser. "
-            "Sign in to both once; this is separate from the individual platform profiles."
+            "For syncing several platforms together, this opens LinkedIn, Naukri, and Wellfound in tabs of one shared browser. "
+            "Sign in to the platforms you use once; this is separate from the individual platform profiles."
         )
-        if st.button("Open both login tabs", key="multi_platform_login"):
+        if st.button("Open shared login tabs", key="multi_platform_login"):
             try:
-                with st.spinner("Waiting for you to finish signing in to both tabs (up to five minutes)…"):
+                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
                     result = _post("/multi-platform/login", timeout=330)
                 if result["status"] == "completed":
                     st.success(result["message"])
@@ -99,6 +99,21 @@ def page_upload():
                     st.warning(result["message"])
             except Exception as exc:  # noqa: BLE001
                 st.error(f"Could not start shared platform login: {exc}")
+    with st.expander("Set up LinkedIn browser login", expanded=False):
+        st.write(
+            "The first LinkedIn sync needs a sign-in in its own dedicated Chromium profile. "
+            "Complete any CAPTCHA or verification yourself."
+        )
+        if st.button("Open LinkedIn login", key="linkedin_login"):
+            try:
+                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
+                    result = _post("/linkedin/login", timeout=330)
+                if result["status"] == "completed":
+                    st.success(result["message"])
+                else:
+                    st.warning(result["message"])
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Could not start LinkedIn login: {exc}")
     with st.expander("Set up Wellfound browser login", expanded=False):
         st.write(
             "The first Wellfound sync needs a sign-in in a dedicated Chromium profile. "

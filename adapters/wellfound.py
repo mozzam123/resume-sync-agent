@@ -212,12 +212,16 @@ class WellfoundAdapter(PlatformAdapter):
             return False
 
     def _wait_for_file_input(self, page, timeout_seconds: int) -> bool:
+        self.prepare_upload_form(page)
         deadline = time.monotonic() + timeout_seconds
         while time.monotonic() < deadline:
             if self._has_file_input(page):
                 return True
             time.sleep(0.5)
         return False
+
+    def prepare_upload_form(self, page) -> None:
+        """Give platform adapters a chance to reveal their file input."""
 
     def open_upload_page(self) -> SyncResult:
         """Open a durable manual-upload window in the dedicated profile."""

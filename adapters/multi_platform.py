@@ -88,6 +88,7 @@ class MultiPlatformBrowser:
             for index, adapter in enumerate(adapters):
                 page = context.pages[0] if index == 0 and context.pages else context.new_page()
                 page.goto(adapter.upload_page_url, wait_until="domcontentloaded", timeout=PAGE_WAIT_SECONDS * 1000)
+                adapter.prepare_upload_form(page)
                 pages[adapter.name] = page
             return pages, context, playwright
         except Exception:
