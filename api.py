@@ -27,7 +27,7 @@ from db import (
 )
 
 router = APIRouter()
-BACKEND_BUILD = "browser-worker-2026-10-28"
+BACKEND_BUILD = "streamlined-ui-2026-10-29"
 
 # Playwright's synchronous API must run outside FastAPI's asyncio loop. A single
 # worker also serializes browser actions when the user selects several platforms.
@@ -41,6 +41,10 @@ def _run_browser_action(action):
 
 class SyncRequest(BaseModel):
     resume_id: int
+    platforms: list[str]
+
+
+class BrowserSetupRequest(BaseModel):
     platforms: list[str]
 
 
@@ -62,7 +66,7 @@ def get_conn():
 def list_platforms():
     """Available platforms and their (manual) upload page URLs."""
     return [
-        {"name": name, "upload_page_url": adapter.upload_page_url}
+        {"name": name, "label": adapter.platform_label, "upload_page_url": adapter.upload_page_url}
         for name, adapter in sorted(ADAPTERS.items())
     ]
 
@@ -162,7 +166,7 @@ def sync_resume(req: SyncRequest):
     selected_adapters = [get_adapter(platform) for platform in req.platforms]
     browser_adapters = [adapter for adapter in selected_adapters if adapter and adapter.uses_playwright]
     shared_results = {}
-    if len(browser_adapters) > 1:
+    if browser_adapters:
         shared_results = _run_browser_action(
             lambda: _multi_platform_browser.upload(
                 browser_adapters, resume["stored_path"], resume["filename"]
@@ -211,18 +215,22 @@ def sync_resume(req: SyncRequest):
     return results
 
 
-@router.post("/multi-platform/login")
-def setup_multi_platform_login():
-    """Open LinkedIn, Naukri, and Wellfound in tabs of the shared browser profile."""
-    adapters = [get_adapter("linkedin"), get_adapter("naukri"), get_adapter("wellfound")]
-    adapters = [adapter for adapter in adapters if adapter is not None]
+@router.post("/browser/setup")
+def setup_browser(req: BrowserSetupRequest):
+    """Open the selected platforms in one shared, persistent browser session."""
+    adapters = [get_adapter(platform) for platform in req.platforms]
+    adapters = [adapter for adapter in adapters if adapter and adapter.uses_playwright]
+    if not adapters:
+        raise HTTPException(status_code=400, detail="Choose at least one supported platform")
     ready = _run_browser_action(lambda: _multi_platform_browser.login(adapters))
+    labels = ", ".join(adapter.platform_label for adapter in adapters)
     return {
-        "status": "completed" if ready else "manual_required",
+        "ready": ready,
+        "platforms": [adapter.name for adapter in adapters],
         "message": (
-            "LinkedIn, Naukri, and Wellfound login are saved in the shared browser profile."
+            f"{labels} are ready in the shared browser."
             if ready
-            else "Complete login or verification in both open tabs, then try again."
+            else "Complete login or verification in the open browser tabs, then try again."
         ),
     }
 
@@ -320,12 +328,12 @@ def open_upload_page(record_id: int):
     if row is None or not row["manual_url"]:
         raise HTTPException(status_code=404, detail="no upload page for this record")
     adapter = get_adapter(row["platform"])
-    if row["platform"] in {"linkedin", "wellfound", "naukri"} and adapter is not None:
-        result = _run_browser_action(adapter.open_upload_page)
+    if adapter is not None and adapter.uses_playwright:
+        _run_browser_action(lambda: _multi_platform_browser.open_pages([adapter]))
         return {
-            "ok": not result.message.startswith("Could not open"),
-            "url": result.manual_url,
-            "message": result.message,
+            "ok": True,
+            "url": adapter.upload_page_url,
+            "message": f"Opened {adapter.platform_label} in the shared browser.",
         }
     webbrowser.open(row["manual_url"])
     return {"ok": True, "url": row["manual_url"]}

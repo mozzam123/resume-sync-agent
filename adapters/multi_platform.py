@@ -74,6 +74,12 @@ class MultiPlatformBrowser:
                     finally:
                         playwright.stop()
 
+    def open_pages(self, adapters: list) -> None:
+        """Reopen manual-upload tabs in the same shared signed-in profile."""
+        with _lock:
+            _pages, context, playwright = self._open_tabs(adapters)
+            self._retain(context, playwright)
+
     def _open_tabs(self, adapters: list):
         os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PLAYWRIGHT_BROWSERS_DIR))
         from playwright.sync_api import sync_playwright

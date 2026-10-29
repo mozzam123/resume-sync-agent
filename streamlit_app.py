@@ -1,267 +1,190 @@
-"""Streamlit UI for the Resume Sync Agent.
-
-Run with:
-
-    streamlit run streamlit_app.py
-
-Make sure the FastAPI backend is running first:
-
-    resume-sync-agent
-"""
+"""A focused local UI for keeping a resume ready across job platforms."""
 
 from __future__ import annotations
+
+import json
+import urllib.request
 
 import streamlit as st
 
 API_BASE = "http://127.0.0.1:8000/api"
-REQUIRED_BACKEND_BUILD = "browser-worker-2026-10-28"
+REQUIRED_BACKEND_BUILD = "streamlined-ui-2026-10-29"
+STATUS_LABELS = {
+    "success": "Synced",
+    "completed": "Completed",
+    "manual_required": "Needs your attention",
+    "failed": "Could not sync",
+}
 
 
 def _get(path: str):
-    import urllib.request
-
-    with urllib.request.urlopen(f"{API_BASE}{path}", timeout=10) as r:
-        import json
-
-        return json.loads(r.read())
+    with urllib.request.urlopen(f"{API_BASE}{path}", timeout=10) as response:
+        return json.loads(response.read())
 
 
-def _post(path: str, payload: dict | None = None, files=None, timeout: int = 30):
-    import json
-    import urllib.request
-
-    if files:
-        import urllib.request as _ur
-
-        # multipart via requests-style encoding handled by http.client below
-        raise NotImplementedError
-    data = json.dumps(payload or {}).encode()
-    req = urllib.request.Request(
+def _post(path: str, payload: dict | None = None, timeout: int = 30):
+    request = urllib.request.Request(
         f"{API_BASE}{path}",
-        data=data,
+        data=json.dumps(payload or {}).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read())
 
 
-def _post_file(path: str, file_obj, filename: str):
-    import json
-    import urllib.request
-
+def _post_file(file_obj):
     boundary = "----ResumeSyncBoundary"
     body = (
         f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
-        f"Content-Type: application/octet-stream\r\n\r\n"
-    ).encode()
-    body += file_obj.read()
-    body += f"\r\n--{boundary}--\r\n".encode()
-    req = urllib.request.Request(
-        f"{API_BASE}{path}",
+        f'Content-Disposition: form-data; name="file"; filename="{file_obj.name}"\r\n'
+        "Content-Type: application/octet-stream\r\n\r\n"
+    ).encode() + file_obj.getvalue() + f"\r\n--{boundary}--\r\n".encode()
+    request = urllib.request.Request(
+        f"{API_BASE}/resumes",
         data=body,
-        headers={
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-        },
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return json.loads(r.read())
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read())
 
 
-def status_badge(status: str):
-    colors = {
-        "success": "green",
-        "failed": "red",
-        "manual_required": "orange",
-        "completed": "blue",
-        "pending": "gray",
-    }
-    color = colors.get(status, "gray")
-    st.markdown(f":{color}[{status}]")
+def _status(status: str) -> None:
+    label = STATUS_LABELS.get(status, status.replace("_", " ").title())
+    if status in {"success", "completed"}:
+        st.success(label)
+    elif status == "manual_required":
+        st.warning(label)
+    else:
+        st.error(label)
 
 
-def page_upload():
-    st.header("Upload a resume")
-    with st.expander("Set up shared LinkedIn + Naukri + Wellfound login", expanded=False):
-        st.write(
-            "For syncing several platforms together, this opens LinkedIn, Naukri, and Wellfound in tabs of one shared browser. "
-            "Sign in to the platforms you use once; this is separate from the individual platform profiles."
-        )
-        if st.button("Open shared login tabs", key="multi_platform_login"):
-            try:
-                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
-                    result = _post("/multi-platform/login", timeout=330)
-                if result["status"] == "completed":
-                    st.success(result["message"])
-                else:
-                    st.warning(result["message"])
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Could not start shared platform login: {exc}")
-    with st.expander("Set up LinkedIn browser login", expanded=False):
-        st.write(
-            "The first LinkedIn sync needs a sign-in in its own dedicated Chromium profile. "
-            "Complete any CAPTCHA or verification yourself."
-        )
-        if st.button("Open LinkedIn login", key="linkedin_login"):
-            try:
-                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
-                    result = _post("/linkedin/login", timeout=330)
-                if result["status"] == "completed":
-                    st.success(result["message"])
-                else:
-                    st.warning(result["message"])
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Could not start LinkedIn login: {exc}")
-    with st.expander("Set up Wellfound browser login", expanded=False):
-        st.write(
-            "The first Wellfound sync needs a sign-in in a dedicated Chromium profile. "
-            "A browser window will open; complete login, CAPTCHA, or verification yourself."
-        )
-        if st.button("Open Wellfound login", key="wellfound_login"):
-            try:
-                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
-                    result = _post("/wellfound/login", timeout=330)
-                if result["status"] == "completed":
-                    st.success(result["message"])
-                else:
-                    st.warning(result["message"])
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Could not start Wellfound login: {exc}")
-    with st.expander("Set up Naukri browser login", expanded=False):
-        st.write(
-            "The first Naukri sync needs a sign-in in its own dedicated Chromium profile. "
-            "Complete any CAPTCHA or verification yourself."
-        )
-        if st.button("Open Naukri login", key="naukri_login"):
-            try:
-                with st.spinner("Waiting for you to finish signing in (up to five minutes)…"):
-                    result = _post("/naukri/login", timeout=330)
-                if result["status"] == "completed":
-                    st.success(result["message"])
-                else:
-                    st.warning(result["message"])
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"Could not start Naukri login: {exc}")
-    uploaded = st.file_uploader("Resume (PDF/DOCX)", type=["pdf", "docx", "txt"])
-    platforms = _get("/platforms")
-    options = [p["name"] for p in platforms]
-    selected = st.multiselect("Platforms to sync to", options, default=options)
-    profile_note = st.text_input(
-        "Note (stored with the sync record, optional)", placeholder="e.g. applied to SWE roles"
+def _platform_label(platforms: list[dict], name: str) -> str:
+    return next((platform["label"] for platform in platforms if platform["name"] == name), name.title())
+
+
+def _render_result(result: dict, platforms: list[dict], key_prefix: str) -> None:
+    label = _platform_label(platforms, result["platform"])
+    with st.container(border=True):
+        left, right = st.columns([1, 3])
+        with left:
+            st.subheader(label)
+            _status(result["status"])
+        with right:
+            if result["status"] in {"manual_required", "failed"}:
+                st.write(result["message"])
+            elif result["status"] == "success":
+                st.caption("Your resume was submitted successfully.")
+            if result.get("manual_url") and result["status"] == "manual_required":
+                open_col, complete_col = st.columns(2)
+                with open_col:
+                    if st.button("Open in browser", key=f"open_{key_prefix}_{result['record_id']}"):
+                        try:
+                            opened = _post(f"/sync/{result['record_id']}/open", timeout=60)
+                            st.info(opened["message"])
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"Could not open the browser: {exc}")
+                with complete_col:
+                    if st.button("Mark complete", key=f"complete_{key_prefix}_{result['record_id']}"):
+                        try:
+                            _post(f"/sync/{result['record_id']}/complete")
+                            st.rerun()
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"Could not update this sync: {exc}")
+
+
+def page_sync(platforms: list[dict]) -> None:
+    st.header("Sync your resume")
+    st.caption("Choose where to keep your latest resume ready.")
+
+    selected = st.multiselect(
+        "Platforms",
+        options=[platform["name"] for platform in platforms],
+        format_func=lambda name: _platform_label(platforms, name),
+        placeholder="Choose one or more platforms",
     )
 
-    if st.button("Upload & sync", disabled=not uploaded or not selected):
+    if selected:
+        with st.expander("First time with these platforms?", expanded=False):
+            st.write("Sign in once in the shared browser. A tab opens for each platform you selected.")
+            if st.button("Set up selected platforms", use_container_width=True):
+                try:
+                    with st.spinner("Waiting for you to sign in in the browser…"):
+                        setup = _post("/browser/setup", {"platforms": selected}, timeout=330)
+                    (st.success if setup["ready"] else st.warning)(setup["message"])
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Could not open the browser: {exc}")
+
+    resume = st.file_uploader("Resume", type=["pdf", "docx"], help="DOCX files are converted to PDF when needed.")
+    if st.button("Sync resume", type="primary", use_container_width=True, disabled=not resume or not selected):
         try:
-            resume = _post_file("/resumes", uploaded, uploaded.name)
-        except Exception as exc:  # noqa: BLE001 - surface connection issues to the user
-            st.error(f"Upload failed: {exc}")
-            return
-        st.success(f"Stored resume: {resume['filename']}")
-        resume_id = resume["id"]
-        st.subheader("Sync results")
-        try:
-            with st.spinner("Syncing selected platforms… Wellfound may open its dedicated browser."):
-                results = _post(
-                    "/sync",
-                    {"resume_id": resume_id, "platforms": selected},
-                    timeout=180,
+            with st.spinner("Saving your resume…"):
+                stored = _post_file(resume)
+            with st.spinner("Syncing your selected platforms…"):
+                st.session_state["latest_results"] = _post(
+                    "/sync", {"resume_id": stored["id"], "platforms": selected}, timeout=180
                 )
+                st.session_state["latest_filename"] = stored["filename"]
         except Exception as exc:  # noqa: BLE001
-            st.error(f"Sync failed: {exc}")
-            return
-        for r in results:
-            col1, col2, col3 = st.columns([2, 2, 4])
-            with col1:
-                st.write(r["platform"])
-            with col2:
-                status_badge(r["status"])
-            with col3:
-                st.write(r["message"])
-                if r["manual_url"]:
-                    if st.button(
-                        "Open upload page",
-                        key=f"open_{r['record_id']}",
-                    ):
-                        try:
-                            opened = _post(f"/sync/{r['record_id']}/open")
-                            if opened["ok"]:
-                                st.info(opened["message"])
-                            else:
-                                st.error(opened["message"])
-                        except Exception as exc:  # noqa: BLE001
-                            st.error(f"Could not open browser: {exc}")
-                    if r["status"] == "manual_required":
-                        if st.button(
-                            "Mark complete", key=f"complete_{r['record_id']}"
-                        ):
-                            try:
-                                _post(f"/sync/{r['record_id']}/complete")
-                                st.success("Marked complete.")
-                                st.rerun()
-                            except Exception as exc:  # noqa: BLE001
-                                st.error(f"Could not mark complete: {exc}")
+            st.error(f"Sync could not start: {exc}")
+
+    results = st.session_state.get("latest_results")
+    if results:
+        st.divider()
+        st.subheader(f"Results for {st.session_state.get('latest_filename', 'your resume')}")
+        for result in results:
+            _render_result(result, platforms, "latest")
 
 
-def page_history():
-    st.header("Upload history")
+def page_history(platforms: list[dict]) -> None:
+    st.header("History")
     try:
         records = _get("/sync/history")
     except Exception as exc:  # noqa: BLE001
         st.error(f"Could not load history: {exc}")
         return
     if not records:
-        st.info("No sync records yet.")
+        st.info("Your sync history will appear here.")
         return
-    for r in records:
-        with st.expander(
-            f"{r['filename']} → {r['platform']} ({r['status']}) · {r['attempted_at'][:16]}"
-        ):
-            st.write(f"Resume: {r['filename']}")
-            st.write(f"Platform: {r['platform']}")
-            status_badge(r["status"])
-            st.write(f"Message: {r['message']}")
-            if r["manual_url"]:
-                if st.button("Open upload page", key=f"hist_open_{r['id']}"):
-                    try:
-                        opened = _post(f"/sync/{r['id']}/open")
-                        if opened["ok"]:
-                            st.info(opened["message"])
-                        else:
-                            st.error(opened["message"])
-                    except Exception as exc:  # noqa: BLE001
-                        st.error(f"Could not open browser: {exc}")
-                if r["status"] == "manual_required":
-                    if st.button("Mark complete", key=f"hist_complete_{r['id']}"):
+    for record in records:
+        label = _platform_label(platforms, record["platform"])
+        with st.expander(f"{record['filename']} · {label} · {STATUS_LABELS.get(record['status'], record['status'])}"):
+            _status(record["status"])
+            if record["status"] in {"manual_required", "failed"}:
+                st.write(record.get("message") or "")
+            if record.get("manual_url") and record["status"] == "manual_required":
+                left, right = st.columns(2)
+                with left:
+                    if st.button("Open in browser", key=f"history_open_{record['id']}"):
                         try:
-                            _post(f"/sync/{r['id']}/complete")
-                            st.success("Marked complete.")
-                            st.rerun()
+                            st.info(_post(f"/sync/{record['id']}/open", timeout=60)["message"])
                         except Exception as exc:  # noqa: BLE001
-                            st.error(f"Could not mark complete: {exc}")
+                            st.error(f"Could not open the browser: {exc}")
+                with right:
+                    if st.button("Mark complete", key=f"history_complete_{record['id']}"):
+                        _post(f"/sync/{record['id']}/complete")
+                        st.rerun()
 
 
-def main():
-    st.set_page_config(page_title="Resume Sync Agent", page_icon="📄")
-    st.title("Resume Sync Agent")
+def main() -> None:
+    st.set_page_config(page_title="Resume Sync", page_icon="📄", layout="centered")
     try:
         health = _get("/health")
+        platforms = _get("/platforms")
     except Exception:
-        st.error(
-            "The backend is unavailable or is an older version. Stop the existing app process, "
-            "then run ./start.command again."
-        )
+        st.error("The app backend is not running. Start it with ./start.command, then refresh this page.")
         st.stop()
     if health.get("build") != REQUIRED_BACKEND_BUILD:
-        st.error("An older backend is still running. Stop it, then run ./start.command again.")
+        st.error("The backend needs restarting to use this version. Stop it, run ./start.command, then refresh.")
         st.stop()
-    st.caption("Upload a resume once, sync it across your selected platforms.")
-    page = st.sidebar.radio("Go to", ["Upload", "History"], index=0)
-    if page == "Upload":
-        page_upload()
+
+    st.title("Resume Sync")
+    page = st.sidebar.radio("", ["Sync", "History"], label_visibility="collapsed")
+    if page == "Sync":
+        page_sync(platforms)
     else:
-        page_history()
+        page_history(platforms)
 
 
 if __name__ == "__main__":
