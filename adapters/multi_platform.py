@@ -85,6 +85,23 @@ class MultiPlatformBrowser:
         from playwright.sync_api import sync_playwright
 
         SHARED_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+
+        # A fresh browser session must not run on the worker thread that still
+        # hosts a previously retained Playwright browser: that thread keeps the
+        # old Playwright asyncio loop alive, so sync_playwright().start() would
+        # raise "using Playwright Sync API inside the asyncio loop". Stop any
+        # retained browsers first so this thread can bind a fresh loop.
+        for retained_context, retained_playwright in list(_open_contexts):
+            try:
+                retained_context.close()
+            except Exception:
+                pass
+            try:
+                retained_playwright.stop()
+            except Exception:
+                pass
+        _open_contexts.clear()
+
         playwright = sync_playwright().start()
         try:
             context = playwright.chromium.launch_persistent_context(

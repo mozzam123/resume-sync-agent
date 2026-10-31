@@ -68,11 +68,12 @@ def page_sync(platforms: list[dict]) -> None:
     st.header("Sync your resume")
     st.caption("Choose where to keep your latest resume ready.")
 
-    selected = st.multiselect(
+    selected = st.pills(
         "Platforms",
         options=[platform["name"] for platform in platforms],
         format_func=lambda name: _platform_label(platforms, name),
-        placeholder="Choose one or more platforms",
+        selection_mode="multi",
+        key="sync_platforms",
     )
 
     if selected:
@@ -86,7 +87,7 @@ def page_sync(platforms: list[dict]) -> None:
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"Could not open the browser: {exc}")
 
-    resume = st.file_uploader("Resume", type=["pdf", "docx"], help="DOCX files are converted to PDF when needed.")
+    resume = st.file_uploader("Resume", type=["pdf", "docx"], key="sync_resume", help="DOCX files are converted to PDF when needed.")
     if st.button("Sync resume", type="primary", use_container_width=True, disabled=not resume or not selected):
         try:
             with st.spinner("Saving your resume…"):
@@ -98,6 +99,10 @@ def page_sync(platforms: list[dict]) -> None:
                 st.session_state["latest_filename"] = stored["filename"]
         except Exception as exc:  # noqa: BLE001
             st.error(f"Sync could not start: {exc}")
+        else:
+            for key in ("sync_platforms", "sync_resume", "latest_results", "latest_filename"):
+                st.session_state.pop(key, None)
+            st.rerun()
 
 def page_history(platforms: list[dict]) -> None:
     st.header("History")
