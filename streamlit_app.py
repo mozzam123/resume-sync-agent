@@ -64,36 +64,6 @@ def _platform_label(platforms: list[dict], name: str) -> str:
     return next((platform["label"] for platform in platforms if platform["name"] == name), name.title())
 
 
-def _render_result(result: dict, platforms: list[dict], key_prefix: str) -> None:
-    label = _platform_label(platforms, result["platform"])
-    with st.container(border=True):
-        left, right = st.columns([1, 3])
-        with left:
-            st.subheader(label)
-            _status(result["status"])
-        with right:
-            if result["status"] in {"manual_required", "failed"}:
-                st.write(result["message"])
-            elif result["status"] == "success":
-                st.caption("Your resume was submitted successfully.")
-            if result.get("manual_url") and result["status"] == "manual_required":
-                open_col, complete_col = st.columns(2)
-                with open_col:
-                    if st.button("Open in browser", key=f"open_{key_prefix}_{result['record_id']}"):
-                        try:
-                            opened = _post(f"/sync/{result['record_id']}/open", timeout=60)
-                            st.info(opened["message"])
-                        except Exception as exc:  # noqa: BLE001
-                            st.error(f"Could not open the browser: {exc}")
-                with complete_col:
-                    if st.button("Mark complete", key=f"complete_{key_prefix}_{result['record_id']}"):
-                        try:
-                            _post(f"/sync/{result['record_id']}/complete")
-                            st.rerun()
-                        except Exception as exc:  # noqa: BLE001
-                            st.error(f"Could not update this sync: {exc}")
-
-
 def page_sync(platforms: list[dict]) -> None:
     st.header("Sync your resume")
     st.caption("Choose where to keep your latest resume ready.")
@@ -128,14 +98,6 @@ def page_sync(platforms: list[dict]) -> None:
                 st.session_state["latest_filename"] = stored["filename"]
         except Exception as exc:  # noqa: BLE001
             st.error(f"Sync could not start: {exc}")
-
-    results = st.session_state.get("latest_results")
-    if results:
-        st.divider()
-        st.subheader(f"Results for {st.session_state.get('latest_filename', 'your resume')}")
-        for result in results:
-            _render_result(result, platforms, "latest")
-
 
 def page_history(platforms: list[dict]) -> None:
     st.header("History")
